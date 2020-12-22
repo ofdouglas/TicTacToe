@@ -6,7 +6,7 @@
 #include "tictactoe.h"
 
 namespace TicTacToe {
-    
+
     /**************************************************************************
      * Text output
      *************************************************************************/
@@ -58,11 +58,18 @@ namespace TicTacToe {
         squares[move.row][move.col] = mark;
     }
 
+    void Board::UndoMove(Move move) {
+        assert(IsInBoundsMove(move));
+        assert(squares[move.row][move.col] != Mark::Empty);
+        squares[move.row][move.col] = Mark::Empty;
+    }
+
+    bool Board::IsInBoundsMove(Move move) const {
+        return move.row >= 0 && move.row < num_rows && move.col >= 0 && move.col < num_cols;
+    }
+
     bool Board::IsValidMove(Move move) const {
-        if (!move.IsInBounds()) {
-            return false;
-        }
-        return squares[move.row][move.col] == Mark::Empty;
+        return IsInBoundsMove(move) && squares[move.row][move.col] == Mark::Empty;
     }
 
     bool Board::HasWon(Mark mark) const {
@@ -130,7 +137,7 @@ namespace TicTacToe {
         return res;
     }
 
-    void Game::Display() {
+    void Game::Display() const {
         std::cout << board;
     }
 
@@ -138,7 +145,7 @@ namespace TicTacToe {
     /**************************************************************************
      * HumanPlayer class
      *************************************************************************/
-    int HumanPlayer::ReadIntWithPrompt(const std::string& prompt) {
+    int HumanPlayer::ReadIntWithPrompt(const std::string& prompt) const {
         int x;
 
         while (true) {
@@ -156,7 +163,7 @@ namespace TicTacToe {
         return x;
     }
 
-    Move HumanPlayer::GetMove(const TicTacToe::Board& board, Mark mark) {
+    Move HumanPlayer::GetMove(const TicTacToe::Board& board, Mark mark) const {
         Move move;
 
         while (true) {
@@ -177,8 +184,8 @@ namespace TicTacToe {
     /**************************************************************************
      * ComputerPlayer class
      *************************************************************************/
-    int ComputerPlayer::Negamax(const TicTacToe::Board& b, Mark mark, int depth) {
-        GameResult res = b.CheckResults();
+    int ComputerPlayer::Negamax(TicTacToe::Board& board, Mark mark, int depth) const {
+        GameResult res = board.CheckResults();
         if (res == GameResult::Draw) {
             return 0;
         }
@@ -189,25 +196,26 @@ namespace TicTacToe {
             return mark == Mark::X ? -1 : +1;
         }
 
-        int value = -1000;
+        int value = std::numeric_limits<int>::min();
 
         // Generate and try all legal moves
         for (int i = 0; i < num_rows; i++) {
             for (int j = 0; j < num_cols; j++) {
                 Move move = {i,j};
                 
-                if (b.IsValidMove(move)) {
-                    TicTacToe::Board new_board = b;
+                if (board.IsValidMove(move)) {
+                    board.ApplyMove(move, mark);
                     Mark new_mark = mark == Mark::X ? Mark::O : Mark::X;
-                    new_board.ApplyMove(move, mark);
 
-                    int new_value = -Negamax(new_board, new_mark, depth + 1);
+                    int new_value = -Negamax(board, new_mark, depth + 1);
                     if (new_value > value) {
                         value = new_value;
                         if (depth == 0) {
                             best_move = move;
                         }
                     }
+
+                    board.UndoMove(move);
                 }
             }
         }
@@ -215,8 +223,10 @@ namespace TicTacToe {
         return value;
     }
 
-    Move ComputerPlayer::GetMove(const TicTacToe::Board& b, Mark mark) {
-        Negamax(b, mark, 0);
+    Move ComputerPlayer::GetMove(const TicTacToe::Board& b, Mark mark) const {
+        //Negamax(TicTacToe::Board(b), mark, 0); -- this does not work. Why?
+        TicTacToe::Board bb = b;
+        Negamax(bb, mark, 0);
         return best_move;
     }
 }

@@ -12,56 +12,53 @@ namespace TicTacToe {
     class Board;
 
     struct Move {
-        bool IsInBounds() {
-            return row >= 0 && row < num_rows &&
-                col >= 0 && col < num_cols;
-        }
-
         int row;
         int col;
     };
 
     class Player {
     public:
-        virtual Move GetMove(const Board& b, Mark mark) = 0;
+        virtual Move GetMove(const Board& b, Mark mark) const = 0;
     };
 
     class HumanPlayer : public Player {
     public:
-        Move GetMove(const Board& b, Mark mark);
+        Move GetMove(const Board& b, Mark mark) const;
 
     private:
-        int ReadIntWithPrompt(const std::string& prompt);
+        int ReadIntWithPrompt(const std::string& prompt) const;
     };
 
     class ComputerPlayer : public Player {
     public:
-        Move GetMove(const Board& b, Mark mark);
+        Move GetMove(const Board& b, Mark mark) const;
 
     private:
-        int Negamax(const Board& b, Mark mark, int depth);
-        Move best_move;
+        int Negamax(Board& b, Mark mark, int depth) const;
+        mutable Move best_move;
     };
 
     class Board {
     public:
         Board();
         void ApplyMove(Move move, Mark sc);
+        void UndoMove(Move move);
         bool IsValidMove(Move move) const;
+        bool IsInBoundsMove(Move move) const;
         GameResult CheckResults() const;
 
     private:
         Mark squares[num_rows][num_cols] = {};
 
         bool HasWon(Mark mark) const;
-        friend std::ostream& operator<<(std::ostream&, const TicTacToe::Board& b);
+        friend std::ostream& operator<<(std::ostream&, const Board& b);
     };
 
     class Game {
     public:
         Game(Player& x_player, Player& o_player);
         GameResult ExecutePly();
-        void Display();
+        void Display() const;
 
     private:
         Board board;
