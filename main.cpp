@@ -5,56 +5,67 @@
 
 #include "tictactoe.h"
 
-/* Tic-tac-toe game components:
- 
- * Board representation (internal)
- * UI (Board display and move input)
- * Computer move selection
- * Game rules (move legality, victory/draw conditions)
- * Other game state: whose turn is it?
-
-
-Board class:
-  - internal representation
-  - game rules
-  - board display
-*/
-
 namespace TicTacToe {
-
-    bool Move::IsInBounds() {
-        return row >= 0 && row < num_rows &&
-            col >= 0 && col < num_cols;
+    
+    /**************************************************************************
+     * Text output
+     *************************************************************************/
+    std::ostream& operator<<(std::ostream& os, TicTacToe::GameResult result) {
+        switch (result) {
+            case TicTacToe::GameResult::Draw:   return os << "Draw";    break;
+            case TicTacToe::GameResult::X_win:  return os << "X wins";  break;
+            case TicTacToe::GameResult::O_win:  return os << "O wins";  break;
+        }
+        return os << static_cast<char>(result);
     }
 
+    std::ostream& operator<<(std::ostream& os, TicTacToe::Mark mark) {
+        switch (mark) {
+            case TicTacToe::Mark::Empty:    return os << " ";   break;
+            case TicTacToe::Mark::X:        return os << "X";   break;
+            case TicTacToe::Mark::O:        return os << "O";   break;
+        }
+        return os << static_cast<char>(mark);
+    }
+
+    std::ostream& operator<<(std::ostream& os, const TicTacToe::Board& b) {
+        for (int i = TicTacToe::num_rows - 1; i >= 0; i--) {
+            os << i << " ";
+            for (int j = 0; j < TicTacToe::num_cols; j++) {
+                os << "| " << b.squares[i][j] << " ";
+            }
+            os << "|" << std::endl;
+        }
+        os << "    0   1   2\n" << std::endl;
+
+        return os;
+    }
+
+
+    /**************************************************************************
+     * Board class
+     *************************************************************************/
     Board::Board() {
         for (auto& col : squares) {
             for (auto& sq : col) {
-                sq = SquareContents::Empty;
+                sq = Mark::Empty;
             }
         }
     }
 
-    void Board::ApplyMove(Move move, SquareContents sc) {
-        if (!move.IsInBounds()) {
-            throw std::logic_error("Board::ApplyMove: out of bounds move");
-        }
-
-        if (squares[move.row][move.col] != SquareContents::Empty) {
-            throw std::logic_error("Board::ApplyMove square already occupied");
-        }
-
-        squares[move.row][move.col] = sc;
+    void Board::ApplyMove(Move move, Mark mark) {
+        assert(IsValidMove(move));
+        squares[move.row][move.col] = mark;
     }
 
     bool Board::IsValidMove(Move move) const {
         if (!move.IsInBounds()) {
             return false;
         }
-        return squares[move.row][move.col] == SquareContents::Empty;
+        return squares[move.row][move.col] == Mark::Empty;
     }
 
-    bool Board::HasWon(SquareContents mark) const {
+    bool Board::HasWon(Mark mark) const {
         for (int i = 0; i < TicTacToe::num_rows; i++) {
             if (squares[i][0] == mark && squares[i][1] == mark && squares[i][2] == mark) {
                 return true;
@@ -79,16 +90,16 @@ namespace TicTacToe {
     }
 
     GameResult Board::CheckResults() const {
-        if (HasWon(SquareContents::X_owned)) {
+        if (HasWon(Mark::X)) {
             return GameResult::X_win;
-        } else if (HasWon(SquareContents::O_owned)) {
+        } else if (HasWon(Mark::O)) {
             return GameResult::O_win;
         }
 
         // A quicker way to detect a draw: ply_number == num_squares
         for (auto& col : squares) {
             for (auto& s : col) {
-                if (s == SquareContents::Empty) {
+                if (s == Mark::Empty) {
                     return GameResult::Ongoing;
                 }
             }
@@ -98,40 +109,21 @@ namespace TicTacToe {
     }
 
 
-    std::string str_from_square_contents(TicTacToe::SquareContents sc) {
-        switch (sc) {
-            case TicTacToe::SquareContents::Empty:     return " ";   break;
-            case TicTacToe::SquareContents::X_owned:   return "X";   break;
-            case TicTacToe::SquareContents::O_owned:   return "O";   break;
-        }
-        assert(0);
-        return "";
-    }
-
-    std::ostream& operator<<(std::ostream& os, const TicTacToe::Board& b) {
-        for (int i = TicTacToe::num_rows - 1; i >= 0; i--) {
-            os << i << " ";
-            for (int j = 0; j < TicTacToe::num_cols; j++) {
-                os << "| " << str_from_square_contents(b.squares[i][j]) << " ";
-            }
-            os << "|" << std::endl;
-        }
-        os << "    0   1   2\n" << std::endl;
-
-        return os;
-    }
-
+    /**************************************************************************
+     * Game class
+     *************************************************************************/
     Game::Game(Player& x_player, Player& o_player) 
         : players{ &x_player, &o_player }, ply_number(0)
         {}
 
     GameResult Game::ExecutePly() {
         unsigned player_index = ply_number % 2;
-        SquareContents player_mark = player_index ? 
-            SquareContents::X_owned : SquareContents::O_owned;
+        Mark mark = player_index ? Mark::X : Mark::O;
 
-        Move move = players[player_index]->GetMove(board);
-        board.ApplyMove(move, player_mark);
+        std::cout << "Player " << mark << " to move: " << std::endl;
+
+        Move move = players[player_index]->GetMove(board, mark);
+        board.ApplyMove(move, mark);
 
         GameResult res = board.CheckResults();
         ply_number++;
@@ -142,6 +134,10 @@ namespace TicTacToe {
         std::cout << board;
     }
 
+
+    /**************************************************************************
+     * HumanPlayer class
+     *************************************************************************/
     int HumanPlayer::ReadIntWithPrompt(const std::string& prompt) {
         int x;
 
@@ -160,8 +156,7 @@ namespace TicTacToe {
         return x;
     }
 
-    // TODO: implement me!
-    Move HumanPlayer::GetMove(const TicTacToe::Board& board) {
+    Move HumanPlayer::GetMove(const TicTacToe::Board& board, Mark mark) {
         Move move;
 
         while (true) {
@@ -179,16 +174,19 @@ namespace TicTacToe {
     }
 
 
-    int ComputerPlayer::Negamax(const TicTacToe::Board& b, SquareContents mark, int depth) {
+    /**************************************************************************
+     * ComputerPlayer class
+     *************************************************************************/
+    int ComputerPlayer::Negamax(const TicTacToe::Board& b, Mark mark, int depth) {
         GameResult res = b.CheckResults();
         if (res == GameResult::Draw) {
             return 0;
         }
         if (res == GameResult::X_win) {
-            return mark == SquareContents::X_owned ? +1 : -1;
+            return mark == Mark::X ? +1 : -1;
         }
         if (res == GameResult::O_win) {
-            return mark == SquareContents::X_owned ? -1 : +1;
+            return mark == Mark::X ? -1 : +1;
         }
 
         int value = -1000;
@@ -200,7 +198,7 @@ namespace TicTacToe {
                 
                 if (b.IsValidMove(move)) {
                     TicTacToe::Board new_board = b;
-                    SquareContents new_mark = mark == SquareContents::X_owned ? SquareContents::O_owned : SquareContents::X_owned;
+                    Mark new_mark = mark == Mark::X ? Mark::O : Mark::X;
                     new_board.ApplyMove(move, mark);
 
                     int new_value = -Negamax(new_board, new_mark, depth + 1);
@@ -217,32 +215,28 @@ namespace TicTacToe {
         return value;
     }
 
-    // TODO: implement me!
-    Move ComputerPlayer::GetMove(const TicTacToe::Board& b) {
+    Move ComputerPlayer::GetMove(const TicTacToe::Board& b, Mark mark) {
         Negamax(b, mark, 0);
         return best_move;
     }
 }
 
-int main(void) {
-    // TODO: this allows us to choose if X or O goes first... Game class assumes O goes first!
-    TicTacToe::HumanPlayer p1(TicTacToe::SquareContents::O_owned);
-    //TicTacToe::ComputerPlayer p1(TicTacToe::SquareContents::O_owned);
-    TicTacToe::ComputerPlayer p2(TicTacToe::SquareContents::X_owned);
-    TicTacToe::Game game(p1, p2);
 
-    TicTacToe::GameResult res;
+int main(void) {
+    using namespace TicTacToe;
+
+    HumanPlayer p1;
+    ComputerPlayer p2;
+    Game game(p1, p2);
+
+    GameResult res;
     do {
         game.Display();
         res = game.ExecutePly();
-    } while (res == TicTacToe::GameResult::Ongoing);
+    } while (res == GameResult::Ongoing);
 
     game.Display();
-    switch (res) {
-        case TicTacToe::GameResult::Draw:   std::cout << "Draw"   << std::endl;   break;
-        case TicTacToe::GameResult::X_win:  std::cout << "X wins" << std::endl;   break;
-        case TicTacToe::GameResult::O_win:  std::cout << "O wins" << std::endl;   break;       
-    }
+    std::cout << res << std::endl;
 
     return 0;
 }

@@ -3,7 +3,7 @@
 namespace TicTacToe {
 
     enum class GameResult { Ongoing, Draw, X_win, O_win };
-    enum class SquareContents { Empty, X_owned, O_owned };
+    enum class Mark { Empty, X, O };
 
     static constexpr int num_rows = 3;
     static constexpr int num_cols = 3;
@@ -12,52 +12,49 @@ namespace TicTacToe {
     class Board;
 
     struct Move {
-        bool IsInBounds();
+        bool IsInBounds() {
+            return row >= 0 && row < num_rows &&
+                col >= 0 && col < num_cols;
+        }
+
         int row;
         int col;
     };
 
     class Player {
     public:
-        virtual Move GetMove(const Board& b) = 0;
+        virtual Move GetMove(const Board& b, Mark mark) = 0;
     };
 
     class HumanPlayer : public Player {
     public:
-        HumanPlayer(SquareContents mark) { this->mark = mark; }
-        Move GetMove(const Board& b);
+        Move GetMove(const Board& b, Mark mark);
+
     private:
         int ReadIntWithPrompt(const std::string& prompt);
-        SquareContents mark;
     };
 
     class ComputerPlayer : public Player {
     public:
-        ComputerPlayer(SquareContents mark) { this->mark = mark; }
-        Move GetMove(const Board& b);
+        Move GetMove(const Board& b, Mark mark);
+
     private:
-        int Negamax(const Board& b, SquareContents mark, int depth);
-        SquareContents mark;
+        int Negamax(const Board& b, Mark mark, int depth);
         Move best_move;
     };
 
     class Board {
     public:
         Board();
-
-        // Throws if an invalid move is applied, so HumanPlayer should validate the move first
-        // using IsValidMove
-        void ApplyMove(Move move, SquareContents sc);
-        
+        void ApplyMove(Move move, Mark sc);
         bool IsValidMove(Move move) const;
-
         GameResult CheckResults() const;
 
     private:
-        friend std::ostream& operator<<(std::ostream&, const TicTacToe::Board& b);
-        SquareContents squares[num_rows][num_cols];
+        Mark squares[num_rows][num_cols] = {};
 
-        bool HasWon(SquareContents mark) const;
+        bool HasWon(Mark mark) const;
+        friend std::ostream& operator<<(std::ostream&, const TicTacToe::Board& b);
     };
 
     class Game {
@@ -72,6 +69,3 @@ namespace TicTacToe {
         unsigned ply_number;
     };
 };
-
-
-
