@@ -1,9 +1,11 @@
-#include <iostream>
 
 namespace TicTacToe {
 
     enum class GameResult { Ongoing, Draw, X_win, O_win };
     enum class Mark { Empty, X, O };
+
+    std::ostream& operator<<(std::ostream& os, TicTacToe::GameResult result);
+    std::ostream& operator<<(std::ostream& os, TicTacToe::Mark mark);
 
     class Board;
 
