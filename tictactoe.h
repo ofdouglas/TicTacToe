@@ -5,10 +5,6 @@ namespace TicTacToe {
     enum class GameResult { Ongoing, Draw, X_win, O_win };
     enum class Mark { Empty, X, O };
 
-    static constexpr int num_rows = 3;
-    static constexpr int num_cols = 3;
-    static constexpr int num_squares = num_rows * num_cols;
-
     class Board;
 
     struct Move {
@@ -40,15 +36,20 @@ namespace TicTacToe {
 
     class Board {
     public:
-        Board();
+        Board(int dimension);
         void ApplyMove(Move move, Mark sc);
         void UndoMove(Move move);
         bool IsValidMove(Move move) const;
         bool IsInBoundsMove(Move move) const;
         GameResult CheckResults() const;
 
+        const int dimension;
+
     private:
-        Mark squares[num_rows][num_cols] = {};
+        Mark* squares;              // Treated as a 2D array; accessed through 'At' function
+        Mark& At(int row, int col);
+        const Mark& At(int row, int col) const;
+
 
         bool HasWon(Mark mark) const;
         friend std::ostream& operator<<(std::ostream&, const Board& b);
@@ -56,7 +57,7 @@ namespace TicTacToe {
 
     class Game {
     public:
-        Game(Player& x_player, Player& o_player);
+        Game(Player& x_player, Player& o_player, int dimension = 3);
         GameResult ExecutePly();
         void Display() const;
 
