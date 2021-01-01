@@ -1,11 +1,37 @@
 #include <iostream>
+#include <stdexcept>
 #include <cassert>
-#include <limits>
-#include <algorithm>
-
+#include <ctime>
 #include "tictactoe.h"
 
 namespace TicTacToe {
+
+    using std::string;
+    using std::cin;
+    using std::cout;
+    using std::endl;
+
+    /**************************************************************************
+     * Debug Options
+     *************************************************************************/    
+    enum class DebugOptions { 
+        HeuristicScore,
+        EvaluationBeforeMove,
+        MoveSelectionStats,
+        BestMove,
+        Negamax
+    };
+
+    enum FlagBits {
+        HeuristicScore = (1UL << static_cast<int>(DebugOptions::HeuristicScore)),
+        EvaluationBeforeMove = (1UL << static_cast<int>(DebugOptions::EvaluationBeforeMove)),
+        MoveSelectionStats = (1UL << static_cast<int>(DebugOptions::MoveSelectionStats)),
+        BestMove = (1UL << static_cast<int>(DebugOptions::BestMove)),
+        Negamax = (1UL << static_cast<int>(DebugOptions::Negamax))
+    };
+
+    static constexpr uint32_t debug_flags = 0;
+
 
     /**************************************************************************
      * Text output
@@ -28,19 +54,24 @@ namespace TicTacToe {
         return os << static_cast<char>(mark);
     }
 
+    string Move::ToString() const {
+        return string(
+            "[" + std::to_string(row) + ", " + std::to_string(col) + "]");
+    }
+
     std::ostream& operator<<(std::ostream& os, const TicTacToe::Board& board) {
         for (int i = board.dimension - 1; i >= 0; i--) {
             os << i << " ";
             for (int j = 0; j < board.dimension; j++) {
                 os << "| " << board.At(i,j) << " ";
             }
-            os << "|" << std::endl;
+            os << "|" << endl;
         }
         os << "   ";
         for (int i = 0; i < board.dimension; i++) {
             os << " " << i << "  ";
         }
-        os << std::endl;
+        os << endl << endl;
 
         return os;
     }
@@ -66,13 +97,24 @@ namespace TicTacToe {
     }
 
     void Board::ApplyMove(Move move, Mark mark) {
-        assert(IsValidMove(move));
+        if (!IsValidMove(move)) {
+            throw std::invalid_argument(
+                string(__func__).append(": invalid move: ").append(move.ToString()));
+        }
+
         At(move.row, move.col) = mark;
     }
 
     void Board::UndoMove(Move move) {
-        assert(IsInBoundsMove(move));
-        assert(At(move.row, move.col) != Mark::Empty);
+        if (!IsInBoundsMove(move)) {
+            throw std::invalid_argument(
+                string(__func__).append(": out of bounds move: ").append(move.ToString()));
+        }
+        if (At(move.row, move.col) == Mark::Empty) {
+            throw std::invalid_argument(
+                string(__func__).append(": undo null move: ").append(move.ToString()));
+        }
+
         At(move.row, move.col) = Mark::Empty;
     }
 
@@ -84,70 +126,98 @@ namespace TicTacToe {
         return IsInBoundsMove(move) && At(move.row, move.col) == Mark::Empty;
     }
 
-    bool Board::HasWon(Mark mark) const {
-        int row, col;
+    score_t Board::ScoreLine(const std::vector<Mark>& line) const {
+        score_t x_count = 0;
+        score_t o_count = 0;
 
-        // Check for column-based victory
-        for (row = 0; row < dimension; row++) {
-            for (col = 0; col < dimension; col++) {
-                if (At(row, col) != mark) {
-                    break;
-                }
+        for (int i = 0; i < dimension; i++) {
+            x_count += (line[i] == Mark::X) ? 1 : 0;
+            o_count += (line[i] == Mark::O) ? 1 : 0;
+        }
+        if (x_count > 0 && o_count > 0) {
+            return 0;
+        } else {
+            score_t diff = x_count - o_count;
+            if (std::abs(diff) == dimension) {
+                return (diff > 0) ? +max_score : -max_score;
+            } else {
+                return diff * score_per_mark;
             }
-            if (col == dimension) {
+        }
+    }
+
+    score_t Board::HeuristicScore() const {
+        score_t score = 0;
+        score_t new_score;
+
+        // Add score from each row
+        for (int row = 0; row < dimension; row++) {
+            for (int col = 0; col < dimension; col++) {
+                line[col] = At(row, col);
+            }
+            new_score = ScoreLine(line);
+            score += new_score;
+            if constexpr(debug_flags & FlagBits::HeuristicScore) {
+                cout << "Row[" << row << "] score = " << new_score << endl;
+            }
+        }
+
+        // Add score from each column
+        for (int col = 0; col < dimension; col++) {
+            for (int row = 0; row < dimension; row++) {
+                line[row] = At(row, col);
+            }
+            new_score = ScoreLine(line);
+            score += new_score;
+            if constexpr(debug_flags & FlagBits::HeuristicScore) {
+                cout << "Col[" << col << "] score = " << new_score << endl;
+            }
+        }
+
+        // Add score from the diagonal
+        for (int i = 0; i < dimension; i++) {
+            line[i] = At(i, i);
+        }
+        new_score = ScoreLine(line);
+        score += new_score;
+        if constexpr(debug_flags & FlagBits::HeuristicScore) {
+            cout << "Diagonal score = " << new_score << endl;
+        }
+
+        // Add score from the anti-diagonal
+        for (int i = 0; i < dimension; i++) {
+            line[i] = At(dimension - i - 1, i);
+        }
+        new_score = ScoreLine(line);
+        score += new_score;
+        if constexpr(debug_flags & FlagBits::HeuristicScore) {
+            cout << "Anti-diagonal score = " << new_score << endl;
+        }
+
+        return score;
+    }
+
+    bool Board::IsAnyTileEmpty() const {
+        for (int i = 0; i < dimension * dimension; i++) {
+            if (squares[i] == Mark::Empty) {
                 return true;
             }
         }
-
-        // Check for row-based victory
-        for (col = 0; col < dimension; col++) {
-            for (row = 0; row < dimension; row++) {
-                if (At(row, col) != mark) {
-                    break;
-                }
-            }
-            if (row == dimension) {
-                return true;
-            }
-        }
-
-        // Check for diagonal-based victory
-        for (row = 0; row < dimension; row++) {
-            if (At(row, col) != mark) {
-                break;
-            }
-        }
-        if (row == dimension) {
-            return true;
-        }
-
-        // Check for anti-diagonal-based victory
-        for (row = 0; row < dimension; row++) {
-            if (At(row, dimension - row - 1) != mark) {
-                break;
-            }
-        }
-        if (row == dimension) {
-            return true;
-        }
-
         return false;
     }
 
     GameResult Board::CheckResults() const {
-        if (HasWon(Mark::X)) {
+        score_t score = HeuristicScore();
+
+        if (score >= max_score) {
             return GameResult::X_win;
-        } else if (HasWon(Mark::O)) {
+        } else if (score <= -max_score) {
             return GameResult::O_win;
+        } else if (IsAnyTileEmpty()) {
+            return GameResult::Ongoing;
+        } else {
+            return GameResult::Draw;            
         }
-
-        for (int i = 0; i < dimension * dimension; i++) {
-            if (squares[i] == Mark::Empty) {
-                return GameResult::Ongoing;
-            }
-        }
-
-        return GameResult::Draw;
     }
 
 
@@ -160,9 +230,13 @@ namespace TicTacToe {
 
     GameResult Game::ExecutePly() {
         unsigned player_index = ply_number % 2;
-        Mark mark = player_index ? Mark::X : Mark::O;
+        Mark mark = player_index ? Mark::O : Mark::X;
 
-        std::cout << "Player " << mark << " to move: " << std::endl;
+        cout << "Player " << mark << " to move: " << endl;
+
+        if constexpr(debug_flags & FlagBits::EvaluationBeforeMove) {
+            cout << "Evaluation before move: " << board.HeuristicScore() << endl;
+        }
 
         Move move = players[player_index]->GetMove(board, mark);
         board.ApplyMove(move, mark);
@@ -173,28 +247,28 @@ namespace TicTacToe {
     }
 
     void Game::Display() const {
-        std::cout << board;
+        cout << board;
     }
 
 
     /**************************************************************************
      * HumanPlayer class
      *************************************************************************/
-    int HumanPlayer::ReadIntWithPrompt(const std::string& prompt) const {
+    int HumanPlayer::ReadIntWithPrompt(const string& prompt) const {
         int x;
 
         while (true) {
-            std::cout << prompt;
-            if (!(std::cin >> x)) {
-                std::cin.clear();
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            cout << prompt;
+            if (!(cin >> x)) {
+                cin.clear();
+                cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             } else {
                 break;
             }
         }
 
-        std::cin.clear();
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        cin.clear();
+        cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         return x;
     }
 
@@ -208,7 +282,7 @@ namespace TicTacToe {
             if (board.IsValidMove(move)) {
                 break;
             } else {
-                std::cout << "Invalid move" << std::endl;
+                cout << "Invalid move" << endl;
             }
         }
 
@@ -219,22 +293,27 @@ namespace TicTacToe {
     /**************************************************************************
      * ComputerPlayer class
      *
-     * TODO: Add pruning, depth limits, and a heuristic function, so that the 
-     * computer player is usable with board dimensions greater than 3. 
+     * TODO: Add pruning
      *************************************************************************/
-    int ComputerPlayer::Negamax(TicTacToe::Board& board, Mark mark, int depth) const {
-        GameResult res = board.CheckResults();
-        if (res == GameResult::Draw) {
-            return 0;
-        }
-        if (res == GameResult::X_win) {
-            return mark == Mark::X ? +1 : -1;
-        }
-        if (res == GameResult::O_win) {
-            return mark == Mark::X ? -1 : +1;
+    score_t ComputerPlayer::Negamax(TicTacToe::Board& board, Mark player, unsigned depth) const {
+        score_t current_score = board.HeuristicScore() * player;
+
+        if constexpr(debug_flags & MoveSelectionStats ) {
+            moves_evaluated++;
+            if (depth > max_depth_this_run) {
+                max_depth_this_run = depth;
+            }
         }
 
-        int value = std::numeric_limits<int>::min();
+        // Return at depth limit, a win for either side, or a draw.
+        if (depth == depth_limit || std::abs(current_score) >= max_score || !board.IsAnyTileEmpty()) {
+            if constexpr(debug_flags & FlagBits::Negamax) {
+                cout << "Returning score " << current_score << " from depth " << depth << endl;
+            }
+            return current_score;
+        }
+
+        score_t best_score = -max_score;
 
         // Generate and try all legal moves
         for (int i = 0; i < board.dimension; i++) {
@@ -242,14 +321,20 @@ namespace TicTacToe {
                 Move move = {i,j};
                 
                 if (board.IsValidMove(move)) {
-                    board.ApplyMove(move, mark);
-                    Mark new_mark = mark == Mark::X ? Mark::O : Mark::X;
+                    board.ApplyMove(move, player);
+                    Mark other_player = static_cast<Mark>(-static_cast<int>(player));
+                    score_t new_score = -Negamax(board, other_player, depth + 1);
 
-                    int new_value = -Negamax(board, new_mark, depth + 1);
-                    if (new_value > value) {
-                        value = new_value;
-                        if (depth == 0) {
+                    if (new_score > best_score) {
+                        best_score = new_score;
+                        if (depth == 1) {
+                            move_selected = true;
                             best_move = move;
+
+                            if constexpr(debug_flags & FlagBits::BestMove) {
+                                cout << "Best move: " << move.ToString() << 
+                                    ", score: " << best_score << endl;
+                            }
                         }
                     }
 
@@ -258,12 +343,25 @@ namespace TicTacToe {
             }
         }
 
-        return value;
+        return best_score;
     }
 
     Move ComputerPlayer::GetMove(const TicTacToe::Board& b, Mark mark) const {
+        move_selected = false;
+        moves_evaluated = 0;
+        max_depth_this_run = 0;
+        clock_t start = clock();
+
         TicTacToe::Board bb = b;
-        Negamax(bb, mark, 0);
+        Negamax(bb, mark, 1);
+
+        float time_diff_s = static_cast<float>(clock() - start) / CLOCKS_PER_SEC;
+
+        if constexpr(debug_flags & FlagBits::MoveSelectionStats) {
+            cout << "Selected move in " << time_diff_s << " s" << " [" << moves_evaluated 
+                << " moves, depth = " << max_depth_this_run << "]" << endl;
+        }
+        assert(move_selected);
         return best_move;
     }
 }

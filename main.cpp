@@ -1,6 +1,9 @@
 #include <iostream>
-
 #include "tictactoe.h"
+
+
+using namespace TicTacToe;
+
 
 void print_usage() {
     std::cout << "Usage: tictactoe [X] [X] [N]" << std::endl;
@@ -8,12 +11,8 @@ void print_usage() {
     std::cout << " and N is the board dimension (default 3, range [3, 10])" << std::endl;
 }
 
-using namespace TicTacToe;
 
 int main(int argc, char* argv[]) {
-    constexpr int min_dimensions = 3;
-    constexpr int max_dimensions = 10;
-
     Player* players[2];
     int player_index = 0;
     int dimensions = 3;
@@ -26,9 +25,10 @@ int main(int argc, char* argv[]) {
         } else {
             try {
                 dimensions = std::stoi(argv[i]);
-                if (dimensions < min_dimensions || dimensions > max_dimensions) {
+                if (dimensions < TicTacToe::min_dimensions || dimensions > TicTacToe::max_dimensions) {
                     throw std::invalid_argument("Dimension outside of range [" + 
-                        std::to_string(min_dimensions) + ", " + std::to_string(max_dimensions) + "]");
+                        std::to_string(TicTacToe::min_dimensions) + ", " + 
+                        std::to_string(TicTacToe::max_dimensions) + "]");
                 }
             } catch (std::invalid_argument& e) {
                 print_usage();
